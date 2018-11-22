@@ -23,45 +23,53 @@
 
 using namespace std;
 
-struct Files{
-	string path;
+struct XFiles {
+	string path_from;
+	string path_to;
 	bool dir; //0 for file, 1 for dir
 };
+typedef struct XFiles XFiles;
 
-struct Task{
+struct Task {
 	int num = 1;
-	vector<struct Files>fileRoll;
+	vector<XFiles>file_roll;
 };
 
-struct Task task;
+typedef struct Task Task;
 
-void analiseArgs(int argc, char* argv[]){
+Task task;
 
-}
-
-void analiseDir(string name) {
-	DIR *d = opendir(name.c_str());
+void analise_dir(string sender, string reciever) {
+	DIR *d = opendir(sender.c_str());
 	if (d == NULL) {
-    	perror(name.c_str());
+    	perror(sender.c_str());
     	return;
    	}
 	for (dirent *de = readdir(d); de != NULL; de = readdir(d)) {
-		string fqn = name + "/" + de->d_name;
+		string fqn = sender + "/" + de->d_name;
+		string dest = reciever + "/" + de->d_name;
       	if (de->d_type == DT_DIR) {
         	if (strcmp(de->d_name,".") == 0) continue;
         	if (strcmp(de->d_name,"..") == 0) continue;
-        	dir(fqn);
+        	analise_dir(fqn, dest);
       	}
-      	printf("%s %s\n", fqn.c_str(), de->d_type==DT_DIR?"[dir]" : "");
+	  	XFiles temp_XFile;
+		temp_XFile.path_from = fqn;
+	   	temp_XFile.path_to = dest;
+      	temp_XFile.dir = (de->d_type==DT_DIR);
+      	task.file_roll.push_back(temp_XFile);
    	}
    	closedir(d);
 }
 
-void copyDir(string sender, string reciever){
-
+void build_task(char* argv[]) {
+	string sender = argv[2], reciever = argv[3];
+	sscanf(argv[1],"-t%d", &task.num);
+	analise_dir(sender, reciever);
 }
 
-void copyFile(string sender, string reciever){
+
+void copy_file(string sender, string reciever) {
 	int read_fd;
 	int write_fd;
  	struct stat stat_buf;
@@ -80,13 +88,13 @@ void copyFile(string sender, string reciever){
  	close (write_fd);
 }
 
+int main(int argc, char* argv[]) {
+	build_task(argv);
+	printf("%d\n", task.num);
 
-int main (int argc, char* argv[])
-{
-	string sender = argv[1];
-	cout << sender << "------------------my test" << endl;
-//	string reciever = argv[2];
-	//cout << reciever << endl;
-	dir(sender);
-	//copyFile(sender, reciever);
+	for(int i = 0; i<task.file_roll.size(); i++) 
+		printf("%s -> %s %s \n",
+			task.file_roll[i].path_from.c_str(),
+			task.file_roll[i].path_to.c_str(),
+			task.file_roll[i].dir ? "[dir]" : "[file]"); 
 }
