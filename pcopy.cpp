@@ -83,18 +83,27 @@ void copy_file(string sender, string reciever) {
  	if(write_fd == 0){
  		perror(reciever.c_str());
  	}
- 	sendfile (write_fd, read_fd, &offset, stat_buf.st_size);
+ 	sendfile (write_fd, read_fd, &offset, stat_buf.st_size); //TODO
  	close (read_fd);
  	close (write_fd);
 }
 
+void copy_dir(string sender, string reciever) {
+ 	struct stat stat_buf;
+ 	off_t offset = 0;
+  	stat (reciever.c_str(), &stat_buf);
+ 	mkdir(reciever.c_str(), stat_buf.st_mode); //TODO
+ 	execl("touch", reciever.c_str(), "-a", sender.c_str(), NULL);
+}
+
 int main(int argc, char* argv[]) {
 	build_task(argv);
-	printf("%d\n", task.num);
+	printf("%d threads will be created\n", task.num);
 
 	for(int i = 0; i<task.file_roll.size(); i++) 
 		printf("%s -> %s %s \n",
 			task.file_roll[i].path_from.c_str(),
 			task.file_roll[i].path_to.c_str(),
 			task.file_roll[i].dir ? "[dir]" : "[file]"); 
+	copy_dir();
 }
