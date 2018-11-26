@@ -6,12 +6,11 @@
 #include <ctime>
 #include <iostream>
 #include <string>
-#include <sys/stat.h>
 #include <dirent.h>
-#include <sys/types.h>
 #include <signal.h>
 #include <cstddef>
 #include <cstring>
+#include <utime.h>
 #include <vector>
 #include <pthread.h>
 #include <iostream>
@@ -26,13 +25,13 @@ using namespace std;
 struct XFiles {
 	string path_from;
 	string path_to;
-	bool dir; //0 for file, 1 for dir
 };
 typedef struct XFiles XFiles;
 
 struct Task {
 	int num = 1;
 	vector<XFiles>file_roll;
+	vector<XFiles>dir_roll;
 };
 
 typedef struct Task Task;
@@ -42,9 +41,15 @@ Task task;
 void analise_dir(string sender, string reciever) {
 	DIR *d = opendir(sender.c_str());
 	if (d == NULL) {
-    	perror(sender.c_str());
+    	string err = sender.c_str();
+ 		err.insert(0, "fail opendir ");
     	return;
    	}
+   	XFiles temp_XFile;
+   	temp_XFile.path_from = sender;
+	temp_XFile.path_to = reciever;
+    task.dir_roll.push_back(temp_XFile);
+
 	for (dirent *de = readdir(d); de != NULL; de = readdir(d)) {
 		string fqn = sender + "/" + de->d_name;
 		string dest = reciever + "/" + de->d_name;
@@ -52,12 +57,12 @@ void analise_dir(string sender, string reciever) {
         	if (strcmp(de->d_name,".") == 0) continue;
         	if (strcmp(de->d_name,"..") == 0) continue;
         	analise_dir(fqn, dest);
+      	}else{
+      		if(de->d_type == DT_DIR) continue;
+			temp_XFile.path_from = fqn;
+	   		temp_XFile.path_to = dest;
+      		task.file_roll.push_back(temp_XFile);
       	}
-	  	XFiles temp_XFile;
-		temp_XFile.path_from = fqn;
-	   	temp_XFile.path_to = dest;
-      	temp_XFile.dir = (de->d_type==DT_DIR);
-      	task.file_roll.push_back(temp_XFile);
    	}
    	closedir(d);
 }
@@ -69,41 +74,157 @@ void build_task(char* argv[]) {
 }
 
 
-void copy_file(string sender, string reciever) {
+void* copy_file(void *argv) {
+	string *ar = (string*)argv;
+	string sender = ar[0];
+	string reciever = ar[1];
 	int read_fd;
 	int write_fd;
  	struct stat stat_buf;
  	off_t offset = 0;
+
  	read_fd = open (sender.c_str(), O_RDONLY);
- 	if(read_fd == 0){
- 		perror(sender.c_str());
+ 	if(-1 == read_fd){
+ 		string err = sender.c_str();
+ 		err.insert(0, "fail open");
+ 		perror(err.c_str());
  	}
-  	fstat (read_fd, &stat_buf);
+
+  	if(-1 == fstat(read_fd, &stat_buf)){
+  	 	string err = sender.c_str();
+ 		err.insert(0, "fail stat ");
+  	 	perror(err.c_str());
+  	}
+
  	write_fd = open (reciever.c_str(), O_WRONLY | O_CREAT, stat_buf.st_mode);
- 	if(write_fd == 0){
- 		perror(reciever.c_str());
+ 	if(-1 == write_fd){
+ 		string err = reciever.c_str();
+ 		err.insert(0, "fail create ");
+ 		perror(err.c_str());
  	}
- 	sendfile (write_fd, read_fd, &offset, stat_buf.st_size); //TODO
+ 	
+ 	if(-1 == sendfile (write_fd, read_fd, &offset, stat_buf.st_size)){
+ 	 	string err = sender.c_str();
+ 	 	err.insert(0 ,"fail sendfile ");
+ 	 	perror(err.c_str());
+ 	}
  	close (read_fd);
  	close (write_fd);
+ 	return NULL;
+}
+
+void modify_file(string sender, string reciever) {
+ 	struct stat stat_buf;
+ 	off_t offset = 0;
+	if(-1 == stat(sender.c_str(), &stat_buf)){
+ 		string err = sender.c_str();
+ 		err.insert(0, "in modify_file stat ");
+ 		perror(err.c_str());
+ 	}
+ 	struct utimbuf buf_time;
+ 	buf_time.actime = stat_buf.st_atime;
+ 	buf_time.modtime =stat_buf.st_mtime;
+
+ 	if(-1 == utime(reciever.c_str(), &buf_time)){
+ 		string err = reciever.c_str();
+ 		err.insert(0, "in modify_file utime ");
+ 		perror(err.c_str());
+ 	}
 }
 
 void copy_dir(string sender, string reciever) {
  	struct stat stat_buf;
  	off_t offset = 0;
-  	stat (reciever.c_str(), &stat_buf);
- 	mkdir(reciever.c_str(), stat_buf.st_mode); //TODO
- 	execl("touch", reciever.c_str(), "-a", sender.c_str(), NULL);
+	if(-1 == stat(sender.c_str(), &stat_buf)){
+ 		string err = sender.c_str();
+ 		err.insert(0, "fail stat ");
+ 		perror(err.c_str());
+ 	}
+ 	if(-1 == mkdir(reciever.c_str(), stat_buf.st_mode)){
+ 		string err = reciever.c_str();
+ 		err.insert(0, "fail create dir ");
+ 		perror(err.c_str());
+ 	}
+ 	struct utimbuf buf_time;
+ 	buf_time.actime = stat_buf.st_atime;
+ 	buf_time.modtime =stat_buf.st_mtime;
+
+ 	if(-1 == utime(reciever.c_str(), &buf_time)){
+ 		string err = reciever.c_str();
+ 		err.insert(0, "fail utime ");
+ 		perror(err.c_str());
+ 	}
+}
+
+void modify_dir(string sender, string reciever) {
+ 	struct stat stat_buf;
+ 	off_t offset = 0;
+	if(-1 == stat(sender.c_str(), &stat_buf)){
+ 		string err = sender.c_str();
+ 		err.insert(0, "fail stat ");
+ 		perror(err.c_str());
+ 	}
+ 	struct utimbuf buf_time;
+ 	buf_time.actime = stat_buf.st_atime;
+ 	buf_time.modtime =stat_buf.st_mtime;
+
+ 	if(-1 == utime(reciever.c_str(), &buf_time)){
+ 		string err = reciever.c_str();
+ 		err.insert(0, "fail utime ");
+ 		perror(err.c_str());
+ 	}
+}
+
+void create_dirs(){
+	struct stat stat_buf;
+	for(int i = 0; i < task.dir_roll.size(); i++){
+		if(-1 == stat(task.dir_roll[i].path_to.c_str(), &stat_buf)){
+			printf("in create_dirs create dir %s\n", task.dir_roll[i].path_to.c_str());
+			copy_dir(task.dir_roll[i].path_from, task.dir_roll[i].path_to);
+		}else{
+			printf("in create_dirs modify dir %s\n", task.dir_roll[i].path_to.c_str());
+			modify_dir(task.dir_roll[i].path_from, task.dir_roll[i].path_to);
+		}
+	}
+}
+
+void create_files(int num){
+	struct stat stat_buf;
+	//while(num > 0){
+		for(int i = 0; i < task.file_roll.size(); i++){
+			if(-1 == stat(task.file_roll[i].path_to.c_str(), &stat_buf)){
+				printf("in create_files create file %s\n", task.file_roll[i].path_to.c_str());
+				copy_file(task.file_roll[i].path_from, task.file_roll[i].path_to);
+			}else{
+				printf("in create_files modify file %s\n", task.file_roll[i].path_to.c_str());
+				modify_file(task.file_roll[i].path_from, task.file_roll[i].path_to);
+			}
+		}
+	//}
+
 }
 
 int main(int argc, char* argv[]) {
+	if(argv[1] == NULL||argv[2] == NULL||argv[3] == NULL){
+		printf("FAIL: No mutch argument\n");
+		return -1;
+	}
+
 	build_task(argv);
 	printf("%d threads will be created\n", task.num);
-
+	for(int i = 0; i<task.dir_roll.size(); i++) 
+		printf("%s -> %s [DIR] \n",
+			task.dir_roll[i].path_from.c_str(),
+			task.dir_roll[i].path_to.c_str());
 	for(int i = 0; i<task.file_roll.size(); i++) 
-		printf("%s -> %s %s \n",
+		printf("%s -> %s [FILE] \n",
 			task.file_roll[i].path_from.c_str(),
-			task.file_roll[i].path_to.c_str(),
-			task.file_roll[i].dir ? "[dir]" : "[file]"); 
-	copy_dir();
+			task.file_roll[i].path_to.c_str());
+	printf("--------------------------------------------------");
+	create_dirs();
+	create_files(task.num);
+	// int num = 4;
+	// while(num > 0){
+		
+	// }
 }
