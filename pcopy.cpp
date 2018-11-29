@@ -133,7 +133,7 @@ void create_dirs(){
 	}
 }
 
-struct thread_args{
+struct thread_arguments{
 	string reciever;
 	string sender;
 	int num;
@@ -142,9 +142,9 @@ struct thread_args{
 void* thread_func(void* arg)
 {
 	while (*arg != END_OF_TASKS) {
-		struct thread_args *args = (struct thread_args*)arg;
-		copy_file(args->sender, args->reciever);
 		pthread_mutex_lock(mutexes+num);
+		struct thread_arguments *args = (struct thread_arguments*)arg;
+		copy_file(args->sender, args->reciever);
 		*arg = NULL;
 		pthread_mutex_unlock(mutexes+num);
 		while (*arg == NULL);
@@ -227,7 +227,7 @@ void create_files(int num){
 		pthread_mutex_init(mutexes+i, NULL);
 	}
 	
-	struct thread_args *args = (struct thread_args*)malloc(sizeof(struct thread_args)*num);
+	struct thread_arguments *args = (struct thread_arguments*)malloc(sizeof(struct thread_arguments)*num);
 	for(int i = 0; i < num; i++){
 		args[i] = NULL;
 	}
@@ -246,9 +246,12 @@ void create_files(int num){
 				args[i].reciever = task.file_roll[0].path_to;
 				args[i].num = i; 
 				pthread_mutex_unlock(mutexes+i);
-				task.file_roll.erase(0);
+				task.file_roll.erase(task.file_roll.begin());
 			}				
 		}	
+	}
+	for(int i = 0; i < num; i++){
+		args[i] = -1;
 	}
 }
 
