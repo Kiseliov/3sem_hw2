@@ -73,79 +73,9 @@ void build_task(char* argv[]) {
 	analise_dir(sender, reciever);
 }
 
-
-struct thread_args{
-	string reciever;
-	string sender;
-	pthread_mutex_t mutex;
-};
-
-void* thread_func(void* arg)
-{
-	while (*arg != END_OF_TASKS) {
-		struct thread_args *args = (struct thread_args*)arg;
-		pthread_mutex_lock(mutexes[arg->num]);
-		copy_file(args->sender, args->reciever);
-		*arg = NULL;
-		pthread_mutex_unlock(args->mutex]);
-		while (*arg == NULL);
-	}
-}
+pthread_mutex_t* mutexes;
 
 
-void copy_file(string sender, string reciever) {
-	int read_fd;
-	int write_fd;
- 	struct stat stat_buf;
- 	off_t offset = 0;
-
- 	read_fd = open (sender.c_str(), O_RDONLY);
- 	if(-1 == read_fd){
- 		string err = sender.c_str();
- 		err.insert(0, "fail open");
- 		perror(err.c_str());
- 	}
-
-  	if(-1 == fstat(read_fd, &stat_buf)){
-  	 	string err = sender.c_str();
- 		err.insert(0, "fail stat ");
-  	 	perror(err.c_str());
-  	}
-
- 	write_fd = open (reciever.c_str(), O_WRONLY | O_CREAT, stat_buf.st_mode);
- 	if(-1 == write_fd){
- 		string err = reciever.c_str();
- 		err.insert(0, "fail create ");
- 		perror(err.c_str());
- 	}
- 	
- 	if(-1 == sendfile (write_fd, read_fd, &offset, stat_buf.st_size)){
- 	 	string err = sender.c_str();
- 	 	err.insert(0 ,"fail sendfile ");
- 	 	perror(err.c_str());
- 	}
- 	close (read_fd);
- 	close (write_fd);
-}
-
-void modify_file(string sender, string reciever) {
- 	struct stat stat_buf;
- 	off_t offset = 0;
-	if(-1 == stat(sender.c_str(), &stat_buf)){
- 		string err = sender.c_str();
- 		err.insert(0, "in modify_file stat ");
- 		perror(err.c_str());
- 	}
- 	struct utimbuf buf_time;
- 	buf_time.actime = stat_buf.st_atime;
- 	buf_time.modtime =stat_buf.st_mtime;
-
- 	if(-1 == utime(reciever.c_str(), &buf_time)){
- 		string err = reciever.c_str();
- 		err.insert(0, "in modify_file utime ");
- 		perror(err.c_str());
- 	}
-}
 
 void copy_dir(string sender, string reciever) {
  	struct stat stat_buf;
@@ -203,26 +133,124 @@ void create_dirs(){
 	}
 }
 
-void create_files(int num){
-	struct stat stat_buf;
-	//while(num > 0){
-		for(int i = 0; i < task.file_roll.size(); i++){
-			if(-1 == stat(task.file_roll[i].path_to.c_str(), &stat_buf)){
-				printf("in create_files create file %s\n", task.file_roll[i].path_to.c_str());
-				string ar[2];
-				ar[0] = task.file_roll[i].path_from;
-				ar[1] = task.file_roll[i].path_to;
-				void *arg = (void*)ar;
-				copy_file(arg);
-			}else{
-				printf("in create_files rename and create file %s\n", task.file_roll[i].path_to.c_str());
-				rename(task.file_roll[i].path_to.c_str(),(task.file_roll[i].path_to + ".old").c_str());
-			}
-		}
-	//}
+struct thread_args{
+	string reciever;
+	string sender;
+	int num;
+};
 
+void* thread_func(void* arg)
+{
+	while (*arg != END_OF_TASKS) {
+		struct thread_args *args = (struct thread_args*)arg;
+		copy_file(args->sender, args->reciever);
+		pthread_mutex_lock(mutexes+num);
+		*arg = NULL;
+		pthread_mutex_unlock(mutexes+num);
+		while (*arg == NULL);
+	}
+}
+//---------------------------------------------------------------------------------------
+void modify_file(string sender, string reciever) {
+ 	struct stat stat_buf;
+ 	off_t offset = 0;
+	if(-1 == stat(sender.c_str(), &stat_buf)){
+ 		string err = sender.c_str();
+ 		err.insert(0, "in modify_file stat ");
+ 		perror(err.c_str());
+ 	}
+ 	struct utimbuf buf_time;
+ 	buf_time.actime = stat_buf.st_atime;
+ 	buf_time.modtime =stat_buf.st_mtime;
+
+ 	if(-1 == utime(reciever.c_str(), &buf_time)){
+ 		string err = reciever.c_str();
+ 		err.insert(0, "in modify_file utime ");
+ 		perror(err.c_str());
+ 	}
 }
 
+void copy_file(string sender, string reciever) {
+	int read_fd;
+	int write_fd;
+ 	struct stat stat_buf;
+ 	off_t offset = 0;
+
+ 	read_fd = open (sender.c_str(), O_RDONLY);
+ 	if(-1 == read_fd){
+ 		string err = sender.c_str();
+ 		err.insert(0, "fail open");
+ 		perror(err.c_str());
+ 	}
+
+  	if(-1 == fstat(read_fd, &stat_buf)){
+  	 	string err = sender.c_str();
+ 		err.insert(0, "fail stat ");
+  	 	perror(err.c_str());
+  	}
+
+ 	write_fd = open (reciever.c_str(), O_WRONLY | O_CREAT, stat_buf.st_mode);
+ 	if(-1 == write_fd){
+ 		string err = reciever.c_str();
+ 		err.insert(0, "fail create ");
+ 		perror(err.c_str());
+ 	}
+ 	
+ 	if(-1 == sendfile (write_fd, read_fd, &offset, stat_buf.st_size)){
+ 	 	string err = sender.c_str();
+ 	 	err.insert(0 ,"fail sendfile ");
+ 	 	perror(err.c_str());
+ 	}
+ 	close (read_fd);
+ 	close (write_fd);
+}
+
+void create_files(int num){
+	struct stat stat_buf;
+	for(int i = 0; i < task.file_roll.size(); i++){	//REMOVE
+		if(-1 != stat((task.file_roll[i].path_to + ".old").c_str(), &stat_buf)){
+			printf("in create_files remove file %s\n", (task.file_roll[i].path_to+".old").c_str());
+			remove((task.file_roll[i].path_to + ".old").c_str());
+		}
+	}
+
+	for(int i = 0; i < task.file_roll.size(); i++){
+		if(-1 != stat((task.file_roll[i].path_to.c_str()), &stat_buf)){ //RENAME
+			printf("in create_files rename file %s\n", task.file_roll[i].path_to.c_str());
+			rename(task.file_roll[i].path_to.c_str(),(task.file_roll[i].path_to + ".old").c_str());
+		}
+	}
+	//-------------------------------------------------------------------------
+	// creating threads
+	mutexes = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t)*num); 
+	for(int i = 0; i < num; i++ ){
+		pthread_mutex_init(mutexes+i, NULL);
+	}
+	
+	struct thread_args *args = (struct thread_args*)malloc(sizeof(struct thread_args)*num);
+	for(int i = 0; i < num; i++){
+		args[i] = NULL;
+	}
+	pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t)*num);
+	for(int i = 0; i < num; i++){
+		pthread_create(threads + i, NULL, thread_func, (void*)(args+i));
+	}
+	//--------------------------------------------------------------------------
+	//copy
+	while(task.file_roll.size > 0){
+		for(int i = 0; i < num; i++){
+			if(args[i] == NULL){
+				printf("in create_files create file %s\n", task.file_roll[0].path_to.c_str());
+				pthread_mutex_lock(mutexes+i);
+				args[i].sender = task.file_roll[0].path_from;
+				args[i].reciever = task.file_roll[0].path_to;
+				args[i].num = i; 
+				pthread_mutex_unlock(mutexes+i);
+				task.file_roll.erase(0);
+			}				
+		}	
+	}
+}
 
 int main(int argc, char* argv[]) {
 	if(argv[3] == NULL){
@@ -242,18 +270,7 @@ int main(int argc, char* argv[]) {
 			task.file_roll[i].path_to.c_str());
 	printf("--------------------------------------------------");
 	create_dirs();
-
-
-//*/
-	struct thread_args **args = (struct thread_args*)malloc(sizeof(struct thread_args)*task.num)
-	for(int i = 0; i < num; i++){
-
-	}
-	pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t)*task.num);
-	while(task.file_roll.size > 0){
-		for(int i = 0; i < num; i++){
-			if(ar)
-		}
-	}
+	create_files(task.num);
+	
 }
 
