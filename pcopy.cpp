@@ -34,6 +34,8 @@ struct Task {
 	vector<XFiles>dir_roll;
 };
 
+int **lock;
+
 typedef struct Task Task;
 
 Task task;
@@ -71,6 +73,23 @@ void build_task(char* argv[]) {
 	string sender = argv[2], reciever = argv[3];
 	sscanf(argv[1],"-t%d", &task.num);
 	analise_dir(sender, reciever);
+}
+
+struct thread_args{
+	string reciever;
+	string sender;
+	int lock;
+};
+
+void* thread_func(void* arg)
+{
+	while (*arg != END_OF_TASKS) {
+		copy_file(arg);
+		lock;
+		*arg = NULL;
+		unlock;
+		while (*arg == NULL);
+	}
 }
 
 
@@ -166,7 +185,7 @@ void modify_dir(string sender, string reciever) {
  	}
  	struct utimbuf buf_time;
  	buf_time.actime = stat_buf.st_atime;
- 	buf_time.modtime =stat_buf.st_mtime;
+ 	buf_time.modtime = stat_buf.st_mtime;
 
  	if(-1 == utime(reciever.c_str(), &buf_time)){
  		string err = reciever.c_str();
@@ -194,22 +213,27 @@ void create_files(int num){
 		for(int i = 0; i < task.file_roll.size(); i++){
 			if(-1 == stat(task.file_roll[i].path_to.c_str(), &stat_buf)){
 				printf("in create_files create file %s\n", task.file_roll[i].path_to.c_str());
-				copy_file(task.file_roll[i].path_from, task.file_roll[i].path_to);
+				string ar[2];
+				ar[0] = task.file_roll[i].path_from;
+				ar[1] = task.file_roll[i].path_to;
+				void *arg = (void*)ar;
+				copy_file(arg);
 			}else{
-				printf("in create_files modify file %s\n", task.file_roll[i].path_to.c_str());
-				modify_file(task.file_roll[i].path_from, task.file_roll[i].path_to);
+				printf("in create_files rename and create file %s\n", task.file_roll[i].path_to.c_str());
+				rename(task.file_roll[i].path_to.c_str(),(task.file_roll[i].path_to + ".old").c_str());
 			}
 		}
 	//}
 
 }
 
+
 int main(int argc, char* argv[]) {
-	if(argv[1] == NULL||argv[2] == NULL||argv[3] == NULL){
-		printf("FAIL: No mutch argument\n");
+	if(argv[3] == NULL){
+		printf("FAIL: Not enough arguments\n");
 		return -1;
 	}
-
+//*
 	build_task(argv);
 	printf("%d threads will be created\n", task.num);
 	for(int i = 0; i<task.dir_roll.size(); i++) 
@@ -223,8 +247,24 @@ int main(int argc, char* argv[]) {
 	printf("--------------------------------------------------");
 	create_dirs();
 	create_files(task.num);
-	// int num = 4;
-	// while(num > 0){
-		
-	// }
+
+/*/
+
+	int num = 4;
+	pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t)*num);
+
+	for(int i = 0; i < task.file_roll.size(); i++){
+	 	for(int j = 0; j < num; j++){
+
+	 	}
+	}
+
+   pthread_t tadd, tsub;
+   pthread_mutex_init(&mutex_g, NULL);
+   pthread_create(&tadd, NULL, add, NULL);
+   pthread_create(&tsub, NULL, sub, NULL);
+   pthread_join(tadd, NULL);
+   pthread_join(tsub, NULL);
+//*/
+	
 }
