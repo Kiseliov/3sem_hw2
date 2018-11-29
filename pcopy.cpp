@@ -73,10 +73,6 @@ void build_task(char* argv[]) {
 	analise_dir(sender, reciever);
 }
 
-pthread_mutex_t* mutexes;
-
-
-
 void copy_dir(string sender, string reciever) {
  	struct stat stat_buf;
  	off_t offset = 0;
@@ -133,23 +129,6 @@ void create_dirs(){
 	}
 }
 
-struct thread_arguments{
-	string reciever;
-	string sender;
-	int num;
-};
-
-void* thread_func(void* arg)
-{
-	while (*arg != END_OF_TASKS) {
-		pthread_mutex_lock(mutexes+num);
-		struct thread_arguments *args = (struct thread_arguments*)arg;
-		copy_file(args->sender, args->reciever);
-		*arg = NULL;
-		pthread_mutex_unlock(mutexes+num);
-		while (*arg == NULL);
-	}
-}
 //---------------------------------------------------------------------------------------
 void modify_file(string sender, string reciever) {
  	struct stat stat_buf;
@@ -169,7 +148,7 @@ void modify_file(string sender, string reciever) {
  		perror(err.c_str());
  	}
 }
-
+//------------------------------------------------------------------------------------
 void copy_file(string sender, string reciever) {
 	int read_fd;
 	int write_fd;
@@ -204,6 +183,26 @@ void copy_file(string sender, string reciever) {
  	close (read_fd);
  	close (write_fd);
 }
+//-------------------------------------------------------------------------------
+struct thread_arguments{
+	string reciever;
+	string sender;
+	int num;
+};
+
+pthread_mutex_t* mutexes;
+
+void* thread_func(void* arg)
+{
+	while (*((int*)(arg)) != -1) {
+		struct thread_arguments *args = (struct thread_arguments*)arg;
+		pthread_mutex_lock(mutexes + args->num);
+		copy_file(args->sender, args->reciever);
+		*(int*)arg = NULL;
+		pthread_mutex_unlock(mutexes + args->num);
+		while (*(int*)arg == NULL);
+	}
+}
 
 void create_files(int num){
 	struct stat stat_buf;
@@ -229,7 +228,7 @@ void create_files(int num){
 	
 	struct thread_arguments *args = (struct thread_arguments*)malloc(sizeof(struct thread_arguments)*num);
 	for(int i = 0; i < num; i++){
-		args[i] = NULL;
+		*((int*)(args+i)) = NULL;
 	}
 	pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t)*num);
 	for(int i = 0; i < num; i++){
@@ -237,21 +236,27 @@ void create_files(int num){
 	}
 	//--------------------------------------------------------------------------
 	//copy
-	while(task.file_roll.size > 0){
+	while(task.file_roll.size() > 0){
 		for(int i = 0; i < num; i++){
-			if(args[i] == NULL){
+			if(*((int*)(args + i)) == NULL){
 				printf("in create_files create file %s\n", task.file_roll[0].path_to.c_str());
 				pthread_mutex_lock(mutexes+i);
+				cout << 1<< endl;
 				args[i].sender = task.file_roll[0].path_from;
 				args[i].reciever = task.file_roll[0].path_to;
 				args[i].num = i; 
+				cout << 1<< endl;
 				pthread_mutex_unlock(mutexes+i);
 				task.file_roll.erase(task.file_roll.begin());
 			}				
 		}	
 	}
 	for(int i = 0; i < num; i++){
-		args[i] = -1;
+		*((int*)(args+i)) = -1;
+	}
+
+	for(int i = 0; i < num; i++){
+		pthread_join(threads[i],NULL);
 	}
 }
 
@@ -271,7 +276,7 @@ int main(int argc, char* argv[]) {
 		printf("%s -> %s [FILE] \n",
 			task.file_roll[i].path_from.c_str(),
 			task.file_roll[i].path_to.c_str());
-	printf("--------------------------------------------------");
+	printf("--------------------------------------------------\n");
 	create_dirs();
 	create_files(task.num);
 	
