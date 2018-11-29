@@ -34,8 +34,6 @@ struct Task {
 	vector<XFiles>dir_roll;
 };
 
-int **lock;
-
 typedef struct Task Task;
 
 Task task;
@@ -75,28 +73,27 @@ void build_task(char* argv[]) {
 	analise_dir(sender, reciever);
 }
 
+
 struct thread_args{
 	string reciever;
 	string sender;
-	int lock;
+	pthread_mutex_t mutex;
 };
 
 void* thread_func(void* arg)
 {
 	while (*arg != END_OF_TASKS) {
-		copy_file(arg);
-		lock;
+		struct thread_args *args = (struct thread_args*)arg;
+		pthread_mutex_lock(mutexes[arg->num]);
+		copy_file(args->sender, args->reciever);
 		*arg = NULL;
-		unlock;
+		pthread_mutex_unlock(args->mutex]);
 		while (*arg == NULL);
 	}
 }
 
 
-void* copy_file(void *argv) {
-	string *ar = (string*)argv;
-	string sender = ar[0];
-	string reciever = ar[1];
+void copy_file(string sender, string reciever) {
 	int read_fd;
 	int write_fd;
  	struct stat stat_buf;
@@ -129,7 +126,6 @@ void* copy_file(void *argv) {
  	}
  	close (read_fd);
  	close (write_fd);
- 	return NULL;
 }
 
 void modify_file(string sender, string reciever) {
@@ -246,25 +242,18 @@ int main(int argc, char* argv[]) {
 			task.file_roll[i].path_to.c_str());
 	printf("--------------------------------------------------");
 	create_dirs();
-	create_files(task.num);
 
-/*/
 
-	int num = 4;
-	pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t)*num);
-
-	for(int i = 0; i < task.file_roll.size(); i++){
-	 	for(int j = 0; j < num; j++){
-
-	 	}
-	}
-
-   pthread_t tadd, tsub;
-   pthread_mutex_init(&mutex_g, NULL);
-   pthread_create(&tadd, NULL, add, NULL);
-   pthread_create(&tsub, NULL, sub, NULL);
-   pthread_join(tadd, NULL);
-   pthread_join(tsub, NULL);
 //*/
-	
+	struct thread_args **args = (struct thread_args*)malloc(sizeof(struct thread_args)*task.num)
+	for(int i = 0; i < num; i++){
+
+	}
+	pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t)*task.num);
+	while(task.file_roll.size > 0){
+		for(int i = 0; i < num; i++){
+			if(ar)
+		}
+	}
 }
+
