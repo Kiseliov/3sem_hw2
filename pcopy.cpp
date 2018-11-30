@@ -158,14 +158,16 @@ void copy_file(string sender, string reciever) {
  	read_fd = open (sender.c_str(), O_RDONLY);
  	if(-1 == read_fd){
  		string err = sender.c_str();
- 		err.insert(0, "fail open");
+ 		err.insert(0, "fail open ");
  		perror(err.c_str());
+ 		return;
  	}
 
   	if(-1 == fstat(read_fd, &stat_buf)){
   	 	string err = sender.c_str();
  		err.insert(0, "fail stat ");
   	 	perror(err.c_str());
+  	 	return;
   	}
 
  	write_fd = open (reciever.c_str(), O_WRONLY | O_CREAT, stat_buf.st_mode);
@@ -173,34 +175,37 @@ void copy_file(string sender, string reciever) {
  		string err = reciever.c_str();
  		err.insert(0, "fail create ");
  		perror(err.c_str());
+ 		return;
  	}
  	
  	if(-1 == sendfile (write_fd, read_fd, &offset, stat_buf.st_size)){
  	 	string err = sender.c_str();
  	 	err.insert(0 ,"fail sendfile ");
  	 	perror(err.c_str());
+ 	 	return;
  	}
  	close (read_fd);
  	close (write_fd);
 }
 //-------------------------------------------------------------------------------
-struct thread_arguments{
-	string reciever;
-	string sender;
-	int num;
-};
 
-pthread_mutex_t* mutexes;
+pthread_mutex_t mutex;
 
-void* thread_func(void* arg)
+void* thread_func(void *a)
 {
-	while (*((int*)(arg)) != -1) {
-		struct thread_arguments *args = (struct thread_arguments*)arg;
-		pthread_mutex_lock(mutexes + args->num);
-		copy_file(args->sender, args->reciever);
-		*(int*)arg = NULL;
-		pthread_mutex_unlock(mutexes + args->num);
-		while (*(int*)arg == NULL);
+	for(;;)
+	{
+		pthread_mutex_lock(&mutex);
+		if(task.file_roll.size() == 0){
+			pthread_mutex_unlock(&mutex);
+			return NULL;
+		}
+		string sender = task.file_roll.back().path_from;
+		string reciever = task.file_roll.back().path_to;
+		task.file_roll.pop_back();
+		cout << "in thread_func copy file " << sender << endl;
+		pthread_mutex_unlock(&mutex);
+		copy_file(sender, reciever);
 	}
 }
 
@@ -212,7 +217,6 @@ void create_files(int num){
 			remove((task.file_roll[i].path_to + ".old").c_str());
 		}
 	}
-
 	for(int i = 0; i < task.file_roll.size(); i++){
 		if(-1 != stat((task.file_roll[i].path_to.c_str()), &stat_buf)){ //RENAME
 			printf("in create_files rename file %s\n", task.file_roll[i].path_to.c_str());
@@ -221,40 +225,14 @@ void create_files(int num){
 	}
 	//-------------------------------------------------------------------------
 	// creating threads
-	mutexes = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t)*num); 
-	for(int i = 0; i < num; i++ ){
-		pthread_mutex_init(mutexes+i, NULL);
-	}
+	pthread_mutex_init(&mutex, NULL);
 	
-	struct thread_arguments *args = (struct thread_arguments*)malloc(sizeof(struct thread_arguments)*num);
-	for(int i = 0; i < num; i++){
-		*((int*)(args+i)) = NULL;
-	}
 	pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t)*num);
 	for(int i = 0; i < num; i++){
-		pthread_create(threads + i, NULL, thread_func, (void*)(args+i));
+		pthread_create(threads + i, NULL, thread_func, NULL);
 	}
 	//--------------------------------------------------------------------------
 	//copy
-	while(task.file_roll.size() > 0){
-		for(int i = 0; i < num; i++){
-			if(*((int*)(args + i)) == NULL){
-				printf("in create_files create file %s\n", task.file_roll[0].path_to.c_str());
-				pthread_mutex_lock(mutexes+i);
-				cout << 1<< endl;
-				args[i].sender = task.file_roll[0].path_from;
-				args[i].reciever = task.file_roll[0].path_to;
-				args[i].num = i; 
-				cout << 1<< endl;
-				pthread_mutex_unlock(mutexes+i);
-				task.file_roll.erase(task.file_roll.begin());
-			}				
-		}	
-	}
-	for(int i = 0; i < num; i++){
-		*((int*)(args+i)) = -1;
-	}
-
 	for(int i = 0; i < num; i++){
 		pthread_join(threads[i],NULL);
 	}
